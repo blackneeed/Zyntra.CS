@@ -1,2 +1,2 @@
 # Zyntra.CS
-A simple bot library for Zyntra. (https://zyntra.xyz)
+A simple bot library for Zyntra. (https://zyntra.gg)
