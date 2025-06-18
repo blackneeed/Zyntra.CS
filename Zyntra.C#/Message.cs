@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 
 namespace Zyntra.CS
 {
-    public class Message
+    public class Message : PartialMessage
     {
-        public long ID;
-        public DateTime DateTime;
+        public string Content;
+        public long BucketID;
+        public User Sender;
+        public bool InCache;
     }
 }

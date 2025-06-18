@@ -23,23 +23,31 @@ namespace Zyntra.CS
         private bool _started;
         private const string api_version = "v1";
         private const string base_url = "https://zyntra.gg";
+        public string BaseURL
+        {
+            get
+            {
+                return base_url + "/" + ConstructBaseEndpoint();
+            }
+        }
 
         public Client() { }
 
         private string ConstructBaseEndpoint() => $"api/{api_version}";
         private string ConstructEndpoint(string endpoint) => ConstructBaseEndpoint() + '/' + endpoint;
-        private RestRequest AuthorizeRequest(RestRequest request) => request.AddHeader("Authorization", _token!); // calling this with a null token shouldn't happen. initializedproperly should be checked
+        private RestRequest AuthorizeRequest(RestRequest request) => request.AddHeader("Authorization", _token!).AddHeader("User-Agent", UserAgent.Random);
         private bool InitializedProperly() => _token != null && _client != null && _started;
 
-        private RestRequest ConstructSendMessageRequest(long accessPoint, string content) => AuthorizeRequest(new RestRequest(ConstructEndpoint($"channels/{accessPoint}/messages"), Method.Post).AddJsonBody(new { content }));
-        public async Task<(bool status, string reason, Message? msg)> SendMessage(long accessPoint, string content)
+        private RestRequest ConstructGetMessageRequest(long accessPointId, long messageId) => AuthorizeRequest(new RestRequest(ConstructEndpoint($"channels/{accessPointId}/messages/{messageId}"), Method.Get));
+        private RestRequest ConstructSendMessageRequest(long accessPointId, string content) => AuthorizeRequest(new RestRequest(ConstructEndpoint($"channels/{accessPointId}/messages"), Method.Post).AddJsonBody(new { content }));
+        public async Task<(bool status, string reason, PartialMessage? msg)> SendMessage(AccessPoint accessPoint, string content)
         {
             if (!InitializedProperly())
             {
                 return (false, "not initialized properly", null);
             }
 
-            RestResponse response = await _client!.ExecuteAsync(ConstructSendMessageRequest(accessPoint, content));
+            RestResponse response = await _client!.ExecuteAsync(ConstructSendMessageRequest(accessPoint.ID, content));
             if (response == null)
             {
                 return (false, "response was null", null);
@@ -76,39 +84,113 @@ namespace Zyntra.CS
                 return (false, "message creation failed", null);
             }
 
-            if (message_response["messageId"] == null || message_response["messageId"]?.Type != JTokenType.Integer)
+            if (message_response["messageId"]?.Type != JTokenType.Integer)
             {
                 return (false, "unexpected response from server", null);
             }
 
-            if (message_response["date"] == null || message_response["date"]?.Type != JTokenType.String)
-            {
-                return (false, "unexpected response from server", null);
-            }
-
-            long messageID = message_response["messageId"]!.Value<long>();
-            string date = message_response["date"]!.Value<string>() ?? "";
-
-            DateTime dateParsed = DateTime.MinValue;
-
-            try
-            {
-                dateParsed = DateTime.Parse(date, null, DateTimeStyles.AdjustToUniversal);
-            }
-            catch (FormatException) { }
-
-            Message msg = new Message { DateTime = dateParsed, ID = messageID };
+            PartialMessage msg = new PartialMessage { ID = message_response["messageId"]!.Value<long>(), AP = accessPoint };
             return (true, "sent message", msg);
         }
 
-        private async Task<(bool status, string reason)> DeleteMessage(long accessPoint, long messageId)
+        private async Task<(bool status, string reason)> DeleteMessage(PartialMessage message)
         {
             return (false, "TBD"); // well szymekk didnt respond ❤️
         }
 
-        private async Task<(bool status, string reason)> GetMessage(long accessPoint, long messageId)
+        public async Task<(bool status, string reason, Message? msg)> GetMessage(PartialMessage message)
         {
-            return (false, "TBD"); // well szymekk didnt respond ❤️
+            if (!InitializedProperly())
+            {
+                return (false, "not initialized properly", null);
+            }
+
+            RestResponse response = await _client!.ExecuteAsync(ConstructGetMessageRequest(message.AP.ID, message.ID));
+            if (response == null)
+            {
+                return (false, "response was null", null);
+            }
+
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                Console.WriteLine(response.StatusCode);
+                return (false, "status code was not OK", null);
+            }
+
+            if (response.ContentType == null || response.ContentType != "application/json")
+            {
+                return (false, "response content type was not application/json", null);
+            }
+
+            if (response.Content == null)
+            {
+                return (false, "response content was null", null);
+            }
+
+            JObject message_response;
+
+            try
+            {
+                message_response = JObject.Parse(response.Content);
+            }
+            catch
+            {
+                return (false, "response content deserialization failed", null);
+            }
+
+            if (message_response["messageContent"]?.Type != JTokenType.String)
+            {
+                return (false, "unexpected1 response from server", null);
+            }
+
+            if (message_response["bucketId"]?.Type != JTokenType.Integer)
+            {
+                return (false, "unexpected2 response from server", null);
+            }
+
+            if (message_response["sender"]?.Type != JTokenType.Object)
+            {
+                return (false, "unexpected3 response from server", null);
+            }
+
+            if (message_response["inCache"]?.Type != JTokenType.Boolean)
+            {
+                return (false, "unexpected4 response from server", null);
+            }
+
+            if (message_response["sender"]?.Type != JTokenType.Object)
+            {
+                return (false, "unexpected5 response from server", null);
+            }
+
+            JToken sender_token = message_response["sender"]!;
+            if (sender_token["id"]?.Type != JTokenType.String)
+            {
+                return (false, "unexpected response from server", null);
+            }
+
+            if (sender_token["username"]?.Type != JTokenType.String)
+            {
+                return (false, "unexpected response from server", null);
+            }
+
+            User sender = new User()
+            {
+                ID = sender_token["id"].Value<string>(),
+                Name = sender_token["username"].Value<string>()
+            };
+
+            Message msg = new Message()
+            {
+                ID = message.ID,
+                AP = message.AP,
+                Sender = sender,
+                BucketID = message_response["bucketId"].Value<long>(),
+                InCache = message_response["inCache"].Value<bool>(),
+                Content = message_response["messageContent"].Value<string>()
+            };
+
+            return (true, "succesfully retrieved message", msg); // well szymekk didnt respond ❤️
         }
 
         private async Task<(bool status, string reason)> StartBot()
