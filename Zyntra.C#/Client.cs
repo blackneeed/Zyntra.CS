@@ -140,27 +140,27 @@ namespace Zyntra.CS
 
             if (message_response["messageContent"]?.Type != JTokenType.String)
             {
-                return (false, "unexpected1 response from server", null);
+                return (false, "unexpected response from server", null);
             }
 
             if (message_response["bucketId"]?.Type != JTokenType.Integer)
             {
-                return (false, "unexpected2 response from server", null);
+                return (false, "unexpected response from server", null);
             }
 
             if (message_response["sender"]?.Type != JTokenType.Object)
             {
-                return (false, "unexpected3 response from server", null);
+                return (false, "unexpected response from server", null);
             }
 
             if (message_response["inCache"]?.Type != JTokenType.Boolean)
             {
-                return (false, "unexpected4 response from server", null);
+                return (false, "unexpected response from server", null);
             }
 
             if (message_response["sender"]?.Type != JTokenType.Object)
             {
-                return (false, "unexpected5 response from server", null);
+                return (false, "unexpected response from server", null);
             }
 
             JToken sender_token = message_response["sender"]!;
